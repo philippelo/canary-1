@@ -855,33 +855,7 @@ uint16_t PlayerWheel::getUnusedPoints() const {
 	const auto vocationBaseId = m_player.getVocation()->getBaseId();
 	const auto modsSupremeIt = modsSupremePositionByVocation.find(vocationBaseId);
 
-	for (const auto &modPosition : modsBasicPosition) {
-		const auto pos = static_cast<uint8_t>(modPosition);
-		uint8_t grade = 0;
-		auto gradeKV = gemsGradeKV(WheelFragmentType_t::Lesser, pos)->get("grade");
-
-		if (gradeKV.has_value()) {
-			grade = static_cast<uint8_t>(gradeKV->get<IntType>());
-		}
-
-		totalPoints += grade == 3 ? 1 : 0;
-	}
-
-	if (modsSupremeIt != modsSupremePositionByVocation.end()) {
-		for (const auto &modPosition : modsSupremeIt->second.get()) {
-			const auto pos = static_cast<uint8_t>(modPosition);
-			uint8_t grade = 0;
-			auto gradeKV = gemsGradeKV(WheelFragmentType_t::Greater, pos)->get("grade");
-
-			if (gradeKV.has_value()) {
-				grade = gradeKV->get<IntType>();
-			}
-
-			totalPoints += grade == 3 ? 1 : 0;
-		}
-	} else {
-		g_logger().error("[{}] supreme modifications not found for vocation base id: {}", std::source_location::current().function_name(), vocationBaseId);
-	}
+	totalPoints += m_modsMaxGrade;
 
 	for (uint8_t i = WheelSlots_t::SLOT_FIRST; i <= WheelSlots_t::SLOT_LAST; ++i) {
 		totalPoints -= getPointsBySlotType(static_cast<WheelSlots_t>(i));
@@ -1028,13 +1002,7 @@ std::shared_ptr<KV> PlayerWheel::gemsGradeKV(WheelFragmentType_t type, uint8_t p
 }
 
 uint8_t PlayerWheel::getGemGrade(WheelFragmentType_t type, uint8_t pos) const {
-	uint8_t grade = 0;
-	const auto gradeKV = gemsGradeKV(type, pos)->get("grade");
-
-	if (gradeKV.has_value()) {
-		grade = static_cast<uint8_t>(gradeKV->get<IntType>());
-	}
-	return grade;
+	return type == WheelFragmentType_t::Lesser ? m_basicGrades[pos] : m_supremeGrades[pos];
 }
 
 std::vector<PlayerWheelGem> PlayerWheel::getRevealedGems() const {
@@ -1384,16 +1352,11 @@ void PlayerWheel::addGems(NetworkMessage &msg) const {
 
 void PlayerWheel::addGradeModifiers(NetworkMessage &msg) const {
 	msg.addByte(0x2E); // Modifiers for all Vocations
+
 	for (const auto &modPosition : modsBasicPosition) {
 		const auto pos = static_cast<uint8_t>(modPosition);
 		msg.addByte(pos);
-		uint8_t grade = 0;
-		auto gradeKV = gemsGradeKV(WheelFragmentType_t::Lesser, pos)->get("grade");
-
-		if (gradeKV.has_value()) {
-			grade = static_cast<uint8_t>(gradeKV->get<IntType>());
-		}
-		msg.addByte(grade);
+		msg.addByte(m_basicGrades[pos]);
 	}
 
 	msg.addByte(0x17); // Modifiers for specific per Vocations
@@ -1405,13 +1368,7 @@ void PlayerWheel::addGradeModifiers(NetworkMessage &msg) const {
 		for (const auto &modPosition : modsSupremeIt->second.get()) {
 			const auto pos = static_cast<uint8_t>(modPosition);
 			msg.addByte(pos);
-			uint8_t grade = 0;
-			auto gradeKV = gemsGradeKV(WheelFragmentType_t::Greater, pos)->get("grade");
-
-			if (gradeKV.has_value()) {
-				grade = gradeKV->get<IntType>();
-			}
-			msg.addByte(grade);
+			msg.addByte(m_supremeGrades[pos]);
 		}
 	} else {
 		g_logger().error("[{}] vocation base id: {}", std::source_location::current().function_name(), m_player.getVocation()->getBaseId());
@@ -1424,9 +1381,10 @@ void PlayerWheel::improveGemGrade(WheelFragmentType_t fragmentType, uint8_t pos)
 	uint8_t quantity = 0;
 	uint8_t grade = 0;
 
-	auto gradeKV = gemsGradeKV(fragmentType, pos)->get("grade");
-	if (gradeKV.has_value()) {
-		grade = gradeKV->get<IntType>();
+	if (fragmentType == WheelFragmentType_t::Lesser) {
+		grade = m_basicGrades[pos];
+	} else {
+		grade = m_supremeGrades[pos];
 	}
 
 	++grade;
@@ -1465,7 +1423,14 @@ void PlayerWheel::improveGemGrade(WheelFragmentType_t fragmentType, uint8_t pos)
 		return;
 	}
 
-	gemsGradeKV(fragmentType, pos)->set("grade", grade);
+	if (fragmentType == WheelFragmentType_t::Lesser) {
+		m_basicGrades[pos] = grade;
+	} else {
+		m_supremeGrades[pos] = grade;
+	}
+
+	m_modsMaxGrade += grade == 3 ? 1 : 0;
+
 	loadPlayerBonusData();
 	sendOpenWheelWindow(m_player.getID());
 }
@@ -1674,6 +1639,52 @@ void PlayerWheel::saveSlotPointsOnPressSaveButton(NetworkMessage &msg) {
 	sendOpenWheelWindow(m_player.getID());
 
 	g_logger().debug("Player: {} is saved the all slots info in: {} milliseconds", m_player.getName(), bm_saveSlot.duration());
+}
+
+void PlayerWheel::loadKVModGrades() {
+	for (const auto &modPosition : modsBasicPosition) {
+		const auto pos = static_cast<uint8_t>(modPosition);
+		auto gradeKV = gemsGradeKV(WheelFragmentType_t::Lesser, pos)->get("grade");
+
+		if (gradeKV.has_value()) {
+			uint8_t grade = gradeKV->get<IntType>();
+			m_basicGrades[pos] = grade;
+			m_modsMaxGrade += grade == 3 ? 1 : 0;
+		}
+	}
+
+	const auto vocationBaseId = m_player.getVocation()->getBaseId();
+	const auto modsSupremeIt = modsSupremePositionByVocation.find(vocationBaseId);
+	for (const auto &modPosition : modsSupremeIt->second.get()) {
+		const auto pos = static_cast<uint8_t>(modPosition);
+		auto gradeKV = gemsGradeKV(WheelFragmentType_t::Greater, pos)->get("grade");
+
+		if (gradeKV.has_value()) {
+			uint8_t grade = gradeKV->get<IntType>();
+			m_supremeGrades[pos] = grade;
+			m_modsMaxGrade += grade == 3 ? 1 : 0;
+		}
+	}
+}
+
+void PlayerWheel::saveKVModGrades() const {
+	for (const auto &modPosition : modsBasicPosition) {
+		const auto pos = static_cast<uint8_t>(modPosition);
+		uint8_t grade = m_basicGrades[pos];
+		if (grade > 0) {
+			gemsGradeKV(WheelFragmentType_t::Lesser, pos)->set("grade", grade);
+		}
+	}
+
+	const auto vocationBaseId = m_player.getVocation()->getBaseId();
+	const auto modsSupremeIt = modsSupremePositionByVocation.find(vocationBaseId);
+	for (const auto &modPosition : modsSupremeIt->second.get()) {
+		const auto pos = static_cast<uint8_t>(modPosition);
+		uint8_t grade = m_supremeGrades[pos];
+		if (grade > 0) {
+			gemsGradeKV(WheelFragmentType_t::Greater, pos)->set("grade", grade);
+		}
+	}
 }
 
 /*
@@ -2555,24 +2566,7 @@ WheelStageEnum_t PlayerWheel::getPlayerSliceStage(const std::string &color) cons
 		}
 	}
 
-	const auto vocationBaseId = m_player.getVocation()->getBaseId();
-	const auto modsSupremeIt = modsSupremePositionByVocation.find(vocationBaseId);
-
-	if (modsSupremeIt != modsSupremePositionByVocation.end()) {
-		for (const auto &modPosition : modsSupremeIt->second.get()) {
-			const auto pos = static_cast<uint8_t>(modPosition);
-			uint8_t grade = 0;
-			auto gradeKV = gemsGradeKV(WheelFragmentType_t::Greater, pos)->get("grade");
-
-			if (gradeKV.has_value()) {
-				grade = gradeKV->get<IntType>();
-			}
-
-			totalPoints += grade == 3 ? 1 : 0;
-		}
-	} else {
-		g_logger().error("[{}] supreme modifications not found for vocation base id: {}", std::source_location::current().function_name(), vocationBaseId);
-	}
+	totalPoints += m_modsMaxGrade;
 
 	if (totalPoints >= static_cast<int>(WheelStagePointsEnum_t::THREE)) {
 		return WheelStageEnum_t::THREE;

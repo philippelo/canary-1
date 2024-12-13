@@ -59,6 +59,9 @@ class PlayerWheel {
 public:
 	explicit PlayerWheel(Player &initPlayer);
 
+	void loadKVModGrades();
+	void saveKVModGrades() const;
+
 	/*
 	 * Functions for load and save player database informations
 	 */
@@ -420,6 +423,10 @@ private:
 
 	PlayerWheelMethodsBonusData m_playerBonusData;
 	std::unique_ptr<WheelModifierContext> m_modifierContext;
+
+	uint8_t m_modsMaxGrade = {};
+	std::array<uint8_t, 49> m_basicGrades = { 0 };
+	std::array<uint8_t, 76> m_supremeGrades = { 0 };
 
 	std::array<uint8_t, static_cast<size_t>(WheelStage_t::STAGE_COUNT)> m_stages = { 0 };
 	std::array<int64_t, static_cast<size_t>(WheelOnThink_t::TOTAL_COUNT)> m_onThink = { 0 };

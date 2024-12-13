@@ -978,6 +978,7 @@ void IOLoginDataLoad::loadPlayerInitializeSystem(const std::shared_ptr<Player> &
 
 	// Wheel loading
 	player->wheel()->loadDBPlayerSlotPointsOnLogin();
+	player->wheel()->loadKVModGrades();
 	player->wheel()->initializePlayerData();
 
 	player->achiev()->loadUnlockedAchievements();
