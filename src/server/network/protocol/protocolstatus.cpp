@@ -16,9 +16,9 @@
 #include "game/scheduling/dispatcher.hpp"
 #include "server/network/message/outputmessage.hpp"
 
-std::string ProtocolStatus::SERVER_NAME = "Canary";
-std::string ProtocolStatus::SERVER_VERSION = "3.0";
-std::string ProtocolStatus::SERVER_DEVELOPERS = "OpenTibiaBR Organization";
+std::string ProtocolStatus::SERVER_NAME = "Pidgeot Server";
+std::string ProtocolStatus::SERVER_VERSION = "0.1";
+std::string ProtocolStatus::SERVER_DEVELOPERS = "Comunidade PokeTibias - Servers TFS 1.x /0.x /Canarys /Pidgeot and OpenTibiaBR";
 
 std::map<uint32_t, int64_t> ProtocolStatus::ipConnectMap;
 const uint64_t ProtocolStatus::start = OTSYS_TIME(true);
